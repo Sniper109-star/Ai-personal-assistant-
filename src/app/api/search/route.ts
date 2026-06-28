@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { chromium } from "playwright";
 
 export async function POST(request: Request) {
   try {
@@ -9,10 +8,24 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Query is required" }, { status: 400 });
     }
 
-    const browser = await chromium.launch({
-      headless: true,
-      args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
-    });
+    let browser;
+    try {
+      const { chromium } = await import("playwright");
+      browser = await chromium.launch({
+        headless: true,
+        args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
+      });
+    } catch (err) {
+      console.error("Playwright launch failed:", err);
+      return NextResponse.json({
+        query,
+        results: [],
+        total: 0,
+        fallback: true,
+        message:
+          "Live search is unavailable in this environment. The engine could not launch the browser. Please try again later or use the Assistant page for manual research.",
+      });
+    }
 
     const context = await browser.newContext({
       userAgent:
@@ -62,6 +75,15 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     console.error("Search error:", error);
-    return NextResponse.json({ error: "Search failed", details: String(error) }, { status: 500 });
+    return NextResponse.json(
+      {
+        error: "Search failed",
+        details: String(error),
+        fallback: true,
+        message:
+          "Live search encountered an unexpected error. The platform may not support browser automation in this environment.",
+      },
+      { status: 500 }
+    );
   }
 }

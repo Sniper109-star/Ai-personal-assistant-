@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { chromium } from "playwright";
 
 export async function POST(request: Request) {
   try {
@@ -9,17 +8,39 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Topic is required" }, { status: 400 });
     }
 
-    const searchResults = await performSearch(topic);
+    let searchResults: { title: string; link: string; snippet: string }[] = [];
+    let searchError: string | null = null;
+
+    try {
+      searchResults = await performSearch(topic);
+    } catch (err) {
+      console.error("Search failed during research:", err);
+      searchError = "Live search unavailable in this environment.";
+    }
+
     const analysis = synthesizeResearch(topic, searchResults, sources || []);
 
-    return NextResponse.json(analysis);
+    return NextResponse.json({
+      ...analysis,
+      searchError,
+      fallback: !!searchError,
+    });
   } catch (error) {
     console.error("Research error:", error);
-    return NextResponse.json({ error: "Failed to process research" }, { status: 500 });
+    return NextResponse.json(
+      {
+        error: "Failed to process research",
+        details: String(error),
+        fallback: true,
+      },
+      { status: 500 }
+    );
   }
 }
 
 async function performSearch(query: string): Promise<{ title: string; link: string; snippet: string }[]> {
+  const { chromium } = await import("playwright");
+
   const browser = await chromium.launch({
     headless: true,
     args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
