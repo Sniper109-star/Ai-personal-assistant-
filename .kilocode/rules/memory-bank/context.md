@@ -14,12 +14,16 @@ The template is a clean Next.js 16 starter with TypeScript and Tailwind CSS 4. I
 - [x] ESLint configuration
 - [x] Memory bank documentation
 - [x] Recipe system for common features
+- [x] Reply Helper feature for generating conversation replies
 
 ## Current Structure
 
 | File/Directory | Purpose | Status |
 |----------------|---------|--------|
-| `src/app/page.tsx` | Home page | ✅ Ready |
+| `src/app/page.tsx` | Home page | ✅ Updated with link |
+| `src/components/ReplyHelper.tsx` | Reply helper component | ✅ New |
+| `src/app/reply-helper/page.tsx` | Reply helper page | ✅ New |
+| `src/app/api/generate-reply/route.ts` | Reply generation API | ✅ New |
 | `src/app/layout.tsx` | Root layout | ✅ Ready |
 | `src/app/globals.css` | Global styles | ✅ Ready |
 | `.kilocode/` | AI context & recipes | ✅ Ready |
@@ -31,6 +35,12 @@ The template is ready. Next steps depend on user requirements:
 1. What type of application to build
 2. What features are needed
 3. Design/branding preferences
+
+### Reply Helper Feature
+- `/reply-helper` page with text input and generated suggestions
+- API route at `/api/generate-reply`
+- Copy-to-clipboard support for suggestions
+- Pattern-based mock responses (easily replaceable with AI backend)
 
 ## Quick Start Guide
 
@@ -85,3 +95,4 @@ export async function GET() {
 | Date | Changes |
 |------|---------|
 | Initial | Template created with base setup |
+| Current | Added Reply Helper feature (page, API route, component) |
