@@ -2,12 +2,15 @@
 
 import { useEffect, useState } from "react";
 
+interface ReasoningTrace {
+  thought: string;
+  action: string;
+  observation: string;
+}
+
 interface Suggestion {
   id: string;
   text: string;
-  emotion?: string;
-  intent?: string;
-  topic?: string;
 }
 
 interface ReasoningResult {
@@ -17,24 +20,28 @@ interface ReasoningResult {
   difficulty: string;
   tone: string;
   suggestions: string[];
+  reasoningTrace: ReasoningTrace[];
+  confidence: number;
+  alternativeReasoning?: string[];
 }
 
 export default function ReplyHelper() {
   const [message, setMessage] = useState("");
-  const [reasoningResult, setReasoningResult] = useState<ReasoningResult | null>(null);
+  const [result, setResult] = useState<ReasoningResult | null>(null);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [loading, setLoading] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editText, setEditText] = useState("");
   const [feedbackSent, setFeedbackSent] = useState<Record<string, boolean>>({});
+  const [showTrace, setShowTrace] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!message.trim() || loading) return;
 
     setLoading(true);
-    setReasoningResult(null);
+    setResult(null);
     setSuggestions([]);
 
     try {
@@ -46,21 +53,16 @@ export default function ReplyHelper() {
 
       const data = await res.json();
       if (data.suggestions) {
-        setReasoningResult(data);
+        setResult(data);
         setSuggestions(
           data.suggestions.map((text: string, index: number) => ({
             id: `${index}-${Date.now()}`,
             text,
-            emotion: data.emotion,
-            intent: data.intent,
-            topic: data.topic,
           }))
         );
       }
     } catch {
-      setSuggestions([
-        { id: "1", text: "Something went wrong. Please try again.", emotion: "neutral", intent: "statement", topic: "general" },
-      ]);
+      setSuggestions([{ id: "1", text: "Something went wrong. Please try again." }]);
     } finally {
       setLoading(false);
     }
@@ -84,7 +86,6 @@ export default function ReplyHelper() {
 
   async function submitEdit(id: string) {
     if (!editText.trim()) return;
-
     const updated = suggestions.map((s) => (s.id === id ? { ...s, text: editText.trim() } : s));
     setSuggestions(updated);
     setEditingId(null);
@@ -92,33 +93,37 @@ export default function ReplyHelper() {
 
     const original = suggestions.find((s) => s.id === id);
     if (original) {
-      await sendFeedback("edited", original.text, editText.trim());
+      await fetch("/api/feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "edited",
+          originalSuggestion: original.text,
+          editedSuggestion: editText.trim(),
+          emotion: result?.emotion || "neutral",
+          intent: result?.intent || "statement",
+          topic: result?.topic || "general",
+        }),
+      });
       setFeedbackSent((prev) => ({ ...prev, [id]: true }));
     }
-  }
-
-  async function sendFeedback(type: "good" | "bad" | "edited", original: string, edited?: string) {
-    const targetId = editingId || Object.keys(feedbackSent).find((k) => feedbackSent[k]);
-    const suggestion = suggestions.find((s) => s.id === targetId);
-    await fetch("/api/feedback", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        type,
-        originalSuggestion: original,
-        editedSuggestion: edited,
-        emotion: reasoningResult?.emotion || "neutral",
-        intent: reasoningResult?.intent || "statement",
-        topic: reasoningResult?.topic || "general",
-      }),
-    });
   }
 
   async function handleFeedback(id: string, type: "good" | "bad") {
     const suggestion = suggestions.find((s) => s.id === id);
     if (!suggestion) return;
 
-    await sendFeedback(type, suggestion.text);
+    await fetch("/api/feedback", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        type,
+        originalSuggestion: suggestion.text,
+        emotion: result?.emotion || "neutral",
+        intent: result?.intent || "statement",
+        topic: result?.topic || "general",
+      }),
+    });
     setFeedbackSent((prev) => ({ ...prev, [id]: true }));
   }
 
@@ -130,20 +135,69 @@ export default function ReplyHelper() {
           Paste an incoming message and get smart reply suggestions powered by deep reasoning.
         </p>
 
-        {reasoningResult && (
-          <div className="mt-4 flex flex-wrap gap-2">
-            <span className="rounded-full border border-neutral-700 bg-neutral-800 px-3 py-1.5 text-xs text-neutral-300">
-              Emotion: {reasoningResult.emotion}
-            </span>
-            <span className="rounded-full border border-neutral-700 bg-neutral-800 px-3 py-1.5 text-xs text-neutral-300">
-              Intent: {reasoningResult.intent}
-            </span>
-            <span className="rounded-full border border-neutral-700 bg-neutral-800 px-3 py-1.5 text-xs text-neutral-300">
-              Topic: {reasoningResult.topic}
-            </span>
-            <span className="rounded-full border border-neutral-700 bg-neutral-800 px-3 py-1.5 text-xs text-neutral-300">
-              Tone: {reasoningResult.tone}
-            </span>
+        {result && (
+          <div className="mt-4 space-y-3">
+            <div className="flex flex-wrap gap-2">
+              <span className="rounded-full border border-neutral-700 bg-neutral-800 px-3 py-1.5 text-xs text-neutral-300">
+                Emotion: {result.emotion}
+              </span>
+              <span className="rounded-full border border-neutral-700 bg-neutral-800 px-3 py-1.5 text-xs text-neutral-300">
+                Intent: {result.intent}
+              </span>
+              <span className="rounded-full border border-neutral-700 bg-neutral-800 px-3 py-1.5 text-xs text-neutral-300">
+                Topic: {result.topic}
+              </span>
+              <span className="rounded-full border border-neutral-700 bg-neutral-800 px-3 py-1.5 text-xs text-neutral-300">
+                Tone: {result.tone}
+              </span>
+              <span className="rounded-full border border-blue-700 bg-blue-900/30 px-3 py-1.5 text-xs text-blue-300">
+                Confidence: {result.confidence}%
+              </span>
+            </div>
+
+            <button
+              onClick={() => setShowTrace(!showTrace)}
+              className="text-xs text-neutral-400 underline hover:text-white"
+            >
+              {showTrace ? "Hide" : "Show"} reasoning trace ({result.reasoningTrace.length} steps)
+            </button>
+
+            {showTrace && (
+              <div className="space-y-2 rounded-xl border border-neutral-800 bg-neutral-900/50 p-4">
+                <h3 className="text-sm font-semibold text-white">ReAct Reasoning Trace</h3>
+                {result.reasoningTrace.map((step, i) => (
+                  <div key={i} className="rounded-lg border border-neutral-800 bg-neutral-800/30 p-3">
+                    <div className="flex items-start gap-2">
+                      <span className="text-[10px] font-mono text-neutral-500">STEP {i + 1}</span>
+                      <div className="flex-1 space-y-1">
+                        <p className="text-xs text-neutral-300">
+                          <span className="font-semibold text-blue-400">Thought:</span> {step.thought}
+                        </p>
+                        <p className="text-xs text-neutral-300">
+                          <span className="font-semibold text-green-400">Action:</span> {step.action}
+                        </p>
+                        <p className="text-xs text-neutral-300">
+                          <span className="font-semibold text-purple-400">Observation:</span> {step.observation}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {result.alternativeReasoning && result.alternativeReasoning.length > 0 && (
+              <details className="rounded-xl border border-neutral-800 bg-neutral-900/50 p-4">
+                <summary className="cursor-pointer text-xs text-neutral-400 hover:text-white">
+                  Alternative reasoning paths ({result.alternativeReasoning.length})
+                </summary>
+                <ul className="mt-2 space-y-1">
+                  {result.alternativeReasoning.map((alt, i) => (
+                    <li key={i} className="text-xs text-neutral-400">• {alt}</li>
+                  ))}
+                </ul>
+              </details>
+            )}
           </div>
         )}
 
@@ -167,7 +221,7 @@ export default function ReplyHelper() {
             disabled={loading || !message.trim()}
             className="w-full rounded-xl bg-white px-4 py-3.5 text-base font-semibold text-neutral-900 transition hover:bg-neutral-200 disabled:cursor-not-allowed disabled:opacity-50 active:scale-[0.98]"
           >
-            {loading ? "Generating..." : "Generate Replies"}
+            {loading ? "Reasoning..." : "Generate Replies"}
           </button>
         </form>
 
@@ -179,17 +233,14 @@ export default function ReplyHelper() {
             </div>
             <ul className="space-y-4">
               {suggestions.map((suggestion) => (
-                <li
-                  key={suggestion.id}
-                  className="rounded-xl border border-neutral-700 bg-neutral-800 p-4"
-                >
+                <li key={suggestion.id} className="rounded-xl border border-neutral-700 bg-neutral-800 p-4">
                   {editingId === suggestion.id ? (
                     <div className="space-y-3">
                       <textarea
                         value={editText}
                         onChange={(e) => setEditText(e.target.value)}
                         rows={3}
-                        className="block w-full rounded-xl border border-neutral-600 bg-neutral-900 px-3 py-2 text-sm text-white placeholder-neutral-500 focus:border-white focus:outline-none"
+                        className="block w-full rounded-xl border border-neutral-600 bg-neutral-900 px-3 py-2.5 text-sm text-white placeholder-neutral-500 focus:border-white focus:outline-none"
                       />
                       <div className="flex gap-2">
                         <button
@@ -253,8 +304,7 @@ export default function ReplyHelper() {
         <div className="mt-6 rounded-xl border border-neutral-800 bg-neutral-900 p-4">
           <p className="text-xs text-neutral-500">
             💡 <strong className="text-neutral-400">Tip:</strong> Rate suggestions with 👍 or 👎, or click Edit to refine them.
-            This helps the Continuous Learning Engine deliver better results over time.
-            Visit <a href="/learning" className="text-white underline">/learning</a> to see your progress.
+            This helps the engine deliver better results over time.
           </p>
         </div>
       </div>

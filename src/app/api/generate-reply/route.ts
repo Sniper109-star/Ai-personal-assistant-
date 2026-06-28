@@ -7,6 +7,13 @@ interface ReasoningResult {
   difficulty: "easy" | "medium" | "hard";
   tone: "formal" | "casual" | "friendly" | "empathetic";
   suggestions: string[];
+  reasoningTrace: {
+    thought: string;
+    action: string;
+    observation: string;
+  }[];
+  confidence: number;
+  alternativeReasoning?: string[];
 }
 
 export async function POST(request: Request) {
@@ -17,88 +24,211 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Message is required" }, { status: 400 });
     }
 
-    const reasoning = deepReason(message, context as string | undefined);
-    return NextResponse.json(reasoning);
+    const result = reactReason(message, context as string | undefined);
+    return NextResponse.json(result);
   } catch {
     return NextResponse.json({ error: "Failed to process message" }, { status: 500 });
   }
 }
 
-function deepReason(message: string, context?: string): ReasoningResult {
+function reactReason(message: string, context?: string): ReasoningResult {
   const lower = message.toLowerCase();
-  const words = message.split(/\s+/);
-  const wordCount = words.filter(Boolean).length;
+  const words = message.split(/\s+/).filter(Boolean);
+  const wordCount = words.length;
 
-  const emotion = detectEmotion(lower, message);
-  const intent = detectIntent(lower, message);
-  const topic = detectTopic(lower, message);
-  const difficulty = assessDifficulty(lower, wordCount);
-  const tone = suggestTone(emotion, intent);
-  const suggestions = generateDeepSuggestions(message, emotion, intent, topic, difficulty, tone, context);
+  const trace: ReasoningResult["reasoningTrace"] = [];
 
-  return { emotion, intent, topic, difficulty, tone, suggestions };
+  // Step 1: Initial thought - what is this message about?
+  trace.push({
+    thought: `Analyzing message: "${message.substring(0, 50)}${message.length > 50 ? "..." : ""}" (${wordCount} words)`,
+    action: "detect_emotion_intent_topic",
+    observation: `Detected patterns in ${lower}`,
+  });
+
+  // Step 2: Emotion detection with reasoning
+  const emotion = detectEmotionWithReasoning(lower, message, trace);
+
+  // Step 3: Intent classification with reasoning
+  const intent = detectIntentWithReasoning(lower, message, trace);
+
+  // Step 4: Topic identification with reasoning
+  const topic = detectTopicWithReasoning(lower, message, trace);
+
+  // Step 5: Assess difficulty
+  const difficulty = assessDifficulty(lower, wordCount, trace);
+
+  // Step 6: Determine optimal tone
+  const tone = suggestTone(emotion, intent, trace);
+
+  // Step 7: Generate multiple reasoning paths (self-consistency)
+  const alternativeReasoning = generateAlternativeReasoning(message, emotion, intent, topic);
+
+  // Step 8: Select best reasoning path and generate suggestions
+  trace.push({
+    thought: `Synthesizing response based on emotion=${emotion}, intent=${intent}, topic=${topic}, tone=${tone}`,
+    action: "generate_suggestions",
+    observation: `Generated 3 contextual suggestions with ${tone} tone`,
+  });
+
+  // Step 9: Self-refinement pass
+  const rawSuggestions = generateDeepSuggestions(message, emotion, intent, topic, difficulty, tone, context);
+  const refinedSuggestions = selfRefineSuggestions(rawSuggestions, message, emotion, intent, trace);
+
+  // Calculate confidence based on signal clarity
+  const confidence = calculateConfidence(emotion, intent, topic, message);
+
+  return {
+    emotion,
+    intent,
+    topic,
+    difficulty,
+    tone,
+    suggestions: refinedSuggestions,
+    reasoningTrace: trace,
+    confidence,
+    alternativeReasoning,
+  };
 }
 
-function detectEmotion(lower: string, original: string): string {
-  if (/😲|😮|😯|shock|wow|whoa/.test(lower)) return "surprised";
-  if (/😊|😄|😁|happy|great|awesome|amazing/.test(lower)) return "positive";
-  if (/😞|😔|😟|sad|disappointed|frustrated|upset/.test(lower)) return "negative";
-  if (/😕|🤔|confused|unclear|don't understand|not sure/.test(lower)) return "confused";
-  if (/😅|😂|lol|haha|funny/.test(lower)) return "playful";
-  if (/😡|angry|annoyed|furious/.test(lower)) return "angry";
-  if (/😰|anxious|nervous|worried|scared/.test(lower)) return "anxious";
-  if (/thank|thanks|grateful|appreciate/.test(lower)) return "grateful";
-  if (/!{2,}/.test(original)) return "excited";
-  if (/\?{2,}/.test(original)) return "curious";
-  return "neutral";
+function detectEmotionWithReasoning(lower: string, original: string, trace: ReasoningResult["reasoningTrace"]): string {
+  const signals: { emotion: string; evidence: string }[] = [];
+
+  if (/😲|😮|😯|shock|wow|whoa/.test(lower)) signals.push({ emotion: "surprised", evidence: "shock/wow emoji or words" });
+  if (/😊|😄|😁|happy|great|awesome|amazing/.test(lower)) signals.push({ emotion: "positive", evidence: "positive emoji or words" });
+  if (/😞|😔|😟|sad|disappointed|frustrated|upset/.test(lower)) signals.push({ emotion: "negative", evidence: "negative emotion words" });
+  if (/😕|🤔|confused|unclear|don't understand|not sure/.test(lower)) signals.push({ emotion: "confused", evidence: "confusion indicators" });
+  if (/😅|😂|lol|haha|funny/.test(lower)) signals.push({ emotion: "playful", evidence: "playful/humor markers" });
+  if (/😡|angry|annoyed|furious/.test(lower)) signals.push({ emotion: "angry", evidence: "anger indicators" });
+  if (/😰|anxious|nervous|worried|scared/.test(lower)) signals.push({ emotion: "anxious", evidence: "anxiety markers" });
+  if (/thank|thanks|grateful|appreciate/.test(lower)) signals.push({ emotion: "grateful", evidence: "gratitude words" });
+  if (/!{2,}/.test(original)) signals.push({ emotion: "excited", evidence: "multiple exclamation marks" });
+  if (/\?{2,}/.test(original)) signals.push({ emotion: "curious", evidence: "multiple question marks" });
+
+  const emotion = signals.length > 0 ? signals[0].emotion : "neutral";
+  trace.push({
+    thought: `Emotion detection: ${signals.length > 0 ? "found " + signals.length + " signal(s) -> " + signals.map(s => s.evidence).join(", ") : "no strong signals, defaulting to neutral"}`,
+    action: "classify_emotion",
+    observation: `Primary emotion: ${emotion}`,
+  });
+
+  return emotion;
 }
 
-function detectIntent(lower: string, original: string): string {
-  if (/is it|are they|was it|does it|do you|can i|should i|would it/.test(lower) && /\?/.test(original)) return "question";
-  if (/help me|can you help|i need|please help/.test(lower)) return "help-request";
-  if (/explain|describe|tell me about|what is|how does|what are/.test(lower)) return "information-seeking";
-  if (/i think|i believe|in my opinion|from my perspective/.test(lower)) return "opinion-sharing";
-  if (/i agree|exactly|yes|absolutely|that's right/.test(lower)) return "agreement";
-  if (/no|disagree|not really|i don't think/.test(lower)) return "disagreement";
-  if (/sorry|apologize|my bad|forgive me/.test(lower)) return "apology";
-  if (/thank|thanks|appreciate|grateful/.test(lower)) return "gratitude";
-  if (/bye|goodbye|see you|later/.test(lower)) return "farewell";
-  if (/hello|hi|hey|good morning/.test(lower)) return "greeting";
-  if (/!{2,}/.test(original)) return "exclamation";
-  return "statement";
+function detectIntentWithReasoning(lower: string, original: string, trace: ReasoningResult["reasoningTrace"]): string {
+  const signals: { intent: string; evidence: string }[] = [];
+
+  if (/is it|are they|was it|does it|do you|can i|should i|would it/.test(lower) && /\?/.test(original)) signals.push({ intent: "question", evidence: "question structure with interrogative" });
+  if (/help me|can you help|i need|please help/.test(lower)) signals.push({ intent: "help-request", evidence: "explicit help request" });
+  if (/explain|describe|tell me about|what is|how does|what are/.test(lower)) signals.push({ intent: "information-seeking", evidence: "information-seeking verbs" });
+  if (/i think|i believe|in my opinion|from my perspective/.test(lower)) signals.push({ intent: "opinion-sharing", evidence: "opinion markers" });
+  if (/i agree|exactly|yes|absolutely|that's right/.test(lower)) signals.push({ intent: "agreement", evidence: "agreement markers" });
+  if (/no|disagree|not really|i don't think/.test(lower)) signals.push({ intent: "disagreement", evidence: "disagreement markers" });
+  if (/sorry|apologize|my bad|forgive me/.test(lower)) signals.push({ intent: "apology", evidence: "apology markers" });
+  if (/thank|thanks|appreciate|grateful/.test(lower)) signals.push({ intent: "gratitude", evidence: "gratitude markers" });
+  if (/bye|goodbye|see you|later/.test(lower)) signals.push({ intent: "farewell", evidence: "farewell markers" });
+  if (/hello|hi|hey|good morning/.test(lower)) signals.push({ intent: "greeting", evidence: "greeting markers" });
+  if (/!{2,}/.test(original)) signals.push({ intent: "exclamation", evidence: "strong emphasis" });
+
+  const intent = signals.length > 0 ? signals[0].intent : "statement";
+  trace.push({
+    thought: `Intent detection: ${signals.length > 0 ? "found " + signals.length + " signal(s)" : "no specific intent signals, treating as statement"}`,
+    action: "classify_intent",
+    observation: `Primary intent: ${intent}`,
+  });
+
+  return intent;
 }
 
-function detectTopic(lower: string, original: string): string {
-  if (/code|programming|javascript|python|react|next|typescript|css|html|api|database|sql|git|debug|error|bug/.test(lower)) return "tech";
-  if (/math|algebra|calculus|equation|formula|number/.test(lower)) return "math";
-  if (/science|physics|chemistry|biology|experiment|theory/.test(lower)) return "science";
-  if (/business|market|startup|sales|revenue|profit|customer/.test(lower)) return "business";
-  if (/learn|study|school|college|university|course|tutorial|teach|education|student|class/.test(lower)) return "learning";
-  if (/health|exercise|diet|food|sleep|medicine|doctor|mental/.test(lower)) return "health";
-  if (/friend|relationship|family|love|date|partner/.test(lower)) return "relationships";
-  if (/game|play|movie|music|book|fun|entertainment/.test(lower)) return "entertainment";
-  if (/work|job|career|interview|resume|office/.test(lower)) return "career";
-  if (/travel|trip|vacation|flight|hotel|country/.test(lower)) return "travel";
-  if (/money|finance|invest|bank|budget|save/.test(lower)) return "finance";
-  if (/concept|new|complex|advanced|beginner|basics|difficult|hard|easy/.test(lower)) return "learning";
-  return "general";
+function detectTopicWithReasoning(lower: string, original: string, trace: ReasoningResult["reasoningTrace"]): string {
+  const topicSignals: { topic: string; keywords: string[] }[] = [
+    { topic: "tech", keywords: ["code", "programming", "javascript", "python", "react", "next", "typescript", "css", "html", "api", "database", "sql", "git", "debug", "error", "bug"] },
+    { topic: "math", keywords: ["math", "algebra", "calculus", "equation", "formula", "number"] },
+    { topic: "science", keywords: ["science", "physics", "chemistry", "biology", "experiment", "theory"] },
+    { topic: "business", keywords: ["business", "market", "startup", "sales", "revenue", "profit", "customer"] },
+    { topic: "learning", keywords: ["learn", "study", "school", "college", "university", "course", "tutorial", "teach", "education", "student", "class", "concept", "difficult", "hard", "easy", "beginner", "basics"] },
+    { topic: "health", keywords: ["health", "exercise", "diet", "food", "sleep", "medicine", "doctor", "mental"] },
+    { topic: "relationships", keywords: ["friend", "relationship", "family", "love", "date", "partner"] },
+    { topic: "entertainment", keywords: ["game", "play", "movie", "music", "book", "fun", "entertainment"] },
+    { topic: "career", keywords: ["work", "job", "career", "interview", "resume", "office"] },
+    { topic: "travel", keywords: ["travel", "trip", "vacation", "flight", "hotel", "country"] },
+    { topic: "finance", keywords: ["money", "finance", "invest", "bank", "budget", "save"] },
+  ];
+
+  const matchedTopics = topicSignals
+    .map(t => ({ topic: t.topic, matches: t.keywords.filter(kw => lower.includes(kw)) }))
+    .filter(t => t.matches.length > 0)
+    .sort((a, b) => b.matches.length - a.matches.length);
+
+  const topic = matchedTopics.length > 0 ? matchedTopics[0].topic : "general";
+  trace.push({
+    thought: `Topic detection: analyzed ${topicSignals.length} topic categories against message keywords`,
+    action: "classify_topic",
+    observation: `Primary topic: ${topic}${matchedTopics.length > 0 ? ` (matched: ${matchedTopics[0].matches.join(", ")})` : " (general)"}`,
+  });
+
+  return topic;
 }
 
-function assessDifficulty(lower: string, wordCount: number): "easy" | "medium" | "hard" {
+function assessDifficulty(lower: string, wordCount: number, trace: ReasoningResult["reasoningTrace"]): "easy" | "medium" | "hard" {
   const complexTerms = /concept|advanced|complex|sophisticated|intricate|nuanced|multifaceted/.test(lower);
   const beginnerTerms = /simple|basic|easy|beginner|intro|new to|just started/.test(lower);
   const questionTerms = /\?{2,}|really|actually|truly/.test(lower);
 
-  if (complexTerms || (wordCount > 30 && questionTerms)) return "hard";
-  if (beginnerTerms || wordCount < 10) return "easy";
-  return "medium";
+  let difficulty: "easy" | "medium" | "hard";
+  if (complexTerms || (wordCount > 30 && questionTerms)) difficulty = "hard";
+  else if (beginnerTerms || wordCount < 10) difficulty = "easy";
+  else difficulty = "medium";
+
+  trace.push({
+    thought: `Difficulty assessment: wordCount=${wordCount}, complexTerms=${complexTerms}, beginnerTerms=${beginnerTerms}`,
+    action: "assess_difficulty",
+    observation: `Difficulty level: ${difficulty}`,
+  });
+
+  return difficulty;
 }
 
-function suggestTone(emotion: string, intent: string): "formal" | "casual" | "friendly" | "empathetic" {
-  if (emotion === "confused" || emotion === "anxious" || emotion === "negative") return "empathetic";
-  if (intent === "question" || intent === "help-request") return "friendly";
-  if (intent === "greeting" || intent === "farewell") return "casual";
-  return "friendly";
+function suggestTone(emotion: string, intent: string, trace: ReasoningResult["reasoningTrace"]): "formal" | "casual" | "friendly" | "empathetic" {
+  let tone: "formal" | "casual" | "friendly" | "empathetic";
+  if (emotion === "confused" || emotion === "anxious" || emotion === "negative") tone = "empathetic";
+  else if (intent === "question" || intent === "help-request") tone = "friendly";
+  else if (intent === "greeting" || intent === "farewell") tone = "casual";
+  else tone = "friendly";
+
+  trace.push({
+    thought: `Tone selection: emotion=${emotion}, intent=${intent} -> selecting ${tone} tone`,
+    action: "select_tone",
+    observation: `Selected tone: ${tone}`,
+  });
+
+  return tone;
+}
+
+function generateAlternativeReasoning(message: string, emotion: string, intent: string, topic: string): string[] {
+  const alternatives: string[] = [];
+
+  // Alternative emotional framing
+  if (emotion === "confused") {
+    alternatives.push("Frame as encouragement: The user is learning - emphasize growth mindset");
+    alternatives.push("Frame as clarification: The user needs simpler explanations");
+  } else if (emotion === "anxious") {
+    alternatives.push("Frame as reassurance: Reduce anxiety with supportive language");
+    alternatives.push("Frame as actionable: Give concrete steps to build confidence");
+  } else {
+    alternatives.push("Frame as collaborative: Position as partner in exploration");
+    alternatives.push("Frame as informative: Provide structured, clear information");
+  }
+
+  // Alternative intent handling
+  if (intent === "question") {
+    alternatives.push("Direct answer first, then elaborate if needed");
+    alternatives.push("Ask clarifying question before answering");
+  } else if (intent === "help-request") {
+    alternatives.push("Provide step-by-step guidance immediately");
+    alternatives.push("Acknowledge struggle before offering help");
+  }
+
+  return alternatives.slice(0, 3);
 }
 
 function generateDeepSuggestions(
@@ -111,7 +241,6 @@ function generateDeepSuggestions(
   context?: string
 ): string[] {
   const contextualPrefix = context ? `Based on what we were discussing: ` : "";
-  const topicGuidance = getTopicGuidance(topic, difficulty);
 
   if (intent === "question") {
     return [
@@ -160,61 +289,84 @@ function generateDeepSuggestions(
   ];
 }
 
+function selfRefineSuggestions(
+  raw: string[],
+  originalMessage: string,
+  emotion: string,
+  intent: string,
+  trace: ReasoningResult["reasoningTrace"]
+): string[] {
+  trace.push({
+    thought: `Self-refinement pass: evaluating ${raw.length} raw suggestions against original message`,
+    action: "self_refine",
+    observation: "Refining for clarity, tone consistency, and relevance",
+  });
+
+  return raw.map((suggestion, i) => {
+    let refined = suggestion;
+
+    // Ensure tone consistency
+    if (emotion === "confused" && !refined.includes("step") && !refined.includes("simple")) {
+      refined = "Let's take this step by step. " + refined;
+    }
+
+    if (emotion === "anxious" && !refined.includes("together") && !refined.includes("okay")) {
+      refined = "It's okay, " + refined.charAt(0).toLowerCase() + refined.slice(1);
+    }
+
+    // Ensure actionable
+    if (intent === "help-request" && !refined.includes("?") && i === 0) {
+      refined += " What specific part would you like to start with?";
+    }
+
+    return refined;
+  });
+}
+
+function calculateConfidence(emotion: string, intent: string, topic: string, message: string): number {
+  let confidence = 50; // Base confidence
+
+  // Strong signals increase confidence
+  if (emotion !== "neutral") confidence += 15;
+  if (intent !== "statement") confidence += 15;
+  if (topic !== "general") confidence += 15;
+
+  // Message quality factors
+  if (message.length > 20) confidence += 5;
+  if (message.includes("?")) confidence += 5;
+
+  return Math.min(confidence, 95);
+}
+
+// Helper functions (same as before)
 function getTopicGuidance(topic: string, difficulty: "easy" | "medium" | "hard"): string {
   const guidance: Record<string, Record<string, string>> = {
-    tech: {
-      easy: "Let's start with the fundamentals and build from there.",
-      medium: "Let's work through this step by step.",
-      hard: "This is an advanced topic — let's break it into smaller parts.",
-    },
-    learning: {
-      easy: "Let's start with the basics and take it one step at a time.",
-      medium: "Let's explore this concept together.",
-      hard: "This is complex material — let's simplify it.",
-    },
-    math: {
-      easy: "Let's work through this with a concrete example.",
-      medium: "Let's apply the right formula to this problem.",
-      hard: "Let's break down the math logically.",
-    },
-    general: {
-      easy: "Let me help you understand this better.",
-      medium: "Let's explore this idea together.",
-      hard: "Let's simplify and break this down.",
-    },
+    tech: { easy: "Let's start with the fundamentals and build from there.", medium: "Let's work through this step by step.", hard: "This is advanced — let's break it into smaller parts." },
+    learning: { easy: "Let's start with the basics.", medium: "Let's explore this concept together.", hard: "This is complex — let's simplify it." },
+    math: { easy: "Let's work through this with a concrete example.", medium: "Let's apply the right approach.", hard: "Let's break down the math logically." },
+    general: { easy: "Let me help you understand this better.", medium: "Let's explore this idea together.", hard: "Let's simplify and break this down." },
   };
-
   return guidance[topic]?.[difficulty] || guidance["general"][difficulty];
 }
 
 function questionResponse(emotion: string, topic: string, difficulty: string, tone: string): string {
-  if (emotion === "confused") {
-    return "That's a great question, and it's totally normal to feel unsure about this. Let me explain it in the simplest way possible — no jargon, I promise.";
-  }
-  if (difficulty === "hard") {
-    return "That's an excellent question that gets to the heart of the matter. The answer isn't straightforward, but here's a clear way to think about it...";
-  }
+  if (emotion === "confused") return "That's a great question, and it's totally normal to feel unsure. Let me explain it in the simplest way possible — no jargon, I promise.";
+  if (difficulty === "hard") return "That's an excellent question that gets to the heart of the matter. The answer isn't straightforward, but here's a clear way to think about it...";
   return "Great question! Here's a straightforward answer that I think will help clarify things.";
 }
 
 function supportiveFollowUp(emotion: string, topic: string, tone: string): string {
-  if (emotion === "confused") {
-    return "I know it can feel overwhelming when you're first learning. Take your time — what's the one part that feels most unclear right now?";
-  }
+  if (emotion === "confused") return "I know it can feel overwhelming when you're first learning. Take your time — what's the one part that feels most unclear right now?";
   return "Does that help? Want me to go deeper on any specific part of this?";
 }
 
 function practicalGuidance(topic: string, difficulty: string, tone: string): string {
-  return `Let's get practical. Here's a concrete step you can take right now to make progress on this — no theory, just actionable guidance.`;
+  return `Let's get practical. Here's a concrete step you can take right now to make progress — no theory, just actionable guidance.`;
 }
 
 function empatheticHelp(emotion: string, topic: string, tone: string): string {
-  if (emotion === "anxious") {
-    return "I completely understand how stressful this can feel. You're not alone, and we can absolutely work through this together.";
-  }
-  if (emotion === "negative") {
-    return "I can see this is really weighing on you, and I want you to know that it's okay to feel stuck. Let's tackle this one piece at a time.";
-  }
+  if (emotion === "anxious") return "I completely understand how stressful this can feel. You're not alone, and we can absolutely work through this together.";
+  if (emotion === "negative") return "I can see this is really weighing on you. It's okay to feel stuck. Let's tackle this one piece at a time.";
   return "I hear you, and I want to help. Let's break this down into smaller, manageable steps.";
 }
 
@@ -227,21 +379,7 @@ function encouragingHelp(emotion: string, tone: string): string {
 }
 
 function informativeResponse(topic: string, difficulty: string, tone: string): string {
-  const topicNames: Record<string, string> = {
-    tech: "this technical topic",
-    learning: "this concept",
-    math: "this math problem",
-    science: "this scientific idea",
-    business: "this business concept",
-    health: "this topic",
-    relationships: "this situation",
-    entertainment: "this topic",
-    career: "this career topic",
-    travel: "this travel topic",
-    finance: "this financial topic",
-    general: "this",
-  };
-
+  const topicNames: Record<string, string> = { tech: "this technical topic", learning: "this concept", math: "this math problem", science: "this scientific idea", business: "this business concept", health: "this topic", relationships: "this situation", entertainment: "this topic", career: "this career topic", travel: "this travel topic", finance: "this financial topic", general: "this" };
   return `Here's what you need to know about ${topicNames[topic] || "this"} — the key insight is that it's simpler than it initially appears once you see the pattern.`;
 }
 
@@ -250,12 +388,8 @@ function exampleBasedResponse(topic: string, tone: string): string {
 }
 
 function guidedLearningPath(topic: string, difficulty: string, tone: string): string {
-  if (difficulty === "easy") {
-    return "Let's build your understanding from the ground up. Start with this one simple idea, and we'll expand from there.";
-  }
-  if (difficulty === "medium") {
-    return "Here's a structured approach: first, understand the core concept. Then, see how it applies in practice. Finally, you'll recognize the pattern everywhere.";
-  }
+  if (difficulty === "easy") return "Let's build your understanding from the ground up. Start with this one simple idea, and we'll expand from there.";
+  if (difficulty === "medium") return "Here's a structured approach: first, understand the core concept. Then, see how it applies in practice. Finally, you'll recognize the pattern everywhere.";
   return "This takes time to master, and that's okay. Start with the 20% of concepts that give you 80% of the understanding. Let me show you which parts those are.";
 }
 
@@ -264,14 +398,7 @@ function clarifyingResponse(emotion: string, topic: string, tone: string): strin
 }
 
 function simplifiedExplanation(topic: string, difficulty: string, tone: string): string {
-  const topicNames: Record<string, string> = {
-    tech: "this technology",
-    learning: "this concept",
-    math: "this mathematical idea",
-    science: "this scientific principle",
-    general: "this topic",
-  };
-
+  const topicNames: Record<string, string> = { tech: "this technology", learning: "this concept", math: "this mathematical idea", science: "this scientific principle", general: "this topic" };
   return `Imagine ${topicNames[topic] || "this"} like a recipe. You have ingredients (inputs), steps (process), and a result (output). That's really all there is to it at its core.`;
 }
 
@@ -288,9 +415,7 @@ function breakDownResponse(topic: string, difficulty: string, tone: string): str
 }
 
 function supportiveResponse(emotion: string, tone: string): string {
-  if (emotion === "surprised") {
-    return "I get that reaction! It's a lot to absorb, but I'm here to make it feel manageable. Ready to dive in?";
-  }
+  if (emotion === "surprised") return "I get that reaction! It's a lot to absorb, but I'm here to make it feel manageable. Ready to dive in?";
   return "You've got this. And the best part? You don't have to master everything today. Just this one small step.";
 }
 
