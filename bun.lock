@@ -5,13 +5,13 @@
     "": {
       "name": "nextjs-template",
       "dependencies": {
-        "@playwright/test": "^1.61.1",
         "next": "^16.1.3",
         "playwright": "^1.61.1",
         "react": "^19.2.3",
         "react-dom": "^19.2.3",
       },
       "devDependencies": {
+        "@playwright/test": "^1.61.1",
         "@tailwindcss/postcss": "^4.1.17",
         "@types/node": "^24.10.2",
         "@types/react": "^19.2.7",

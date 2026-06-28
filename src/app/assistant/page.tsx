@@ -94,52 +94,52 @@ export default function AssistantPage() {
   const completedCount = tasks.filter((t) => t.completed).length;
 
   return (
-    <div className="mx-auto max-w-5xl px-4 py-16 sm:px-6 lg:px-8">
-      <h1 className="text-3xl font-bold tracking-tight text-white">Personal Assistant</h1>
-      <p className="mt-2 text-neutral-400">Organize tasks, track priorities, search the web, and manage your workflow.</p>
+    <div className="mx-auto max-w-3xl px-4 py-10 sm:px-6 sm:py-16 lg:px-8 lg:py-16">
+      <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">Personal Assistant</h1>
+      <p className="mt-2 text-sm text-neutral-400 sm:text-base">Organize tasks, track priorities, search the web, and manage your workflow.</p>
 
-      <div className="mt-8 grid grid-cols-3 gap-4">
-        <div className="rounded-lg border border-neutral-800 bg-neutral-900 p-4 text-center">
-          <div className="text-2xl font-bold text-red-400">{priorityCounts.high}</div>
-          <div className="text-xs text-neutral-500 uppercase tracking-wider">High</div>
+      <div className="mt-6 grid grid-cols-3 gap-3 sm:gap-4">
+        <div className="rounded-xl border border-neutral-800 bg-neutral-900 p-3 text-center sm:p-4">
+          <div className="text-xl font-bold text-red-400 sm:text-2xl">{priorityCounts.high}</div>
+          <div className="text-[10px] text-neutral-500 uppercase tracking-wider sm:text-xs">High</div>
         </div>
-        <div className="rounded-lg border border-neutral-800 bg-neutral-900 p-4 text-center">
-          <div className="text-2xl font-bold text-yellow-400">{priorityCounts.medium}</div>
-          <div className="text-xs text-neutral-500 uppercase tracking-wider">Medium</div>
+        <div className="rounded-xl border border-neutral-800 bg-neutral-900 p-3 text-center sm:p-4">
+          <div className="text-xl font-bold text-yellow-400 sm:text-2xl">{priorityCounts.medium}</div>
+          <div className="text-[10px] text-neutral-500 uppercase tracking-wider sm:text-xs">Medium</div>
         </div>
-        <div className="rounded-lg border border-neutral-800 bg-neutral-900 p-4 text-center">
-          <div className="text-2xl font-bold text-green-400">{priorityCounts.low}</div>
-          <div className="text-xs text-neutral-500 uppercase tracking-wider">Low</div>
+        <div className="rounded-xl border border-neutral-800 bg-neutral-900 p-3 text-center sm:p-4">
+          <div className="text-xl font-bold text-green-400 sm:text-2xl">{priorityCounts.low}</div>
+          <div className="text-[10px] text-neutral-500 uppercase tracking-wider sm:text-xs">Low</div>
         </div>
       </div>
 
-      <div className="mt-8 rounded-lg border border-neutral-800 bg-neutral-900 p-6">
-        <h2 className="text-lg font-semibold text-white">Web Search</h2>
-        <form onSubmit={handleSearch} className="mt-4 flex gap-3">
+      <div className="mt-6 rounded-xl border border-neutral-800 bg-neutral-900 p-4 sm:p-6">
+        <h2 className="text-base font-semibold text-white sm:text-lg">Web Search</h2>
+        <form onSubmit={handleSearch} className="mt-3 flex gap-2 sm:gap-3">
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search Google for anything..."
-            className="flex-1 rounded-lg border border-neutral-700 bg-neutral-800 px-4 py-2 text-white placeholder-neutral-500 focus:border-white focus:outline-none focus:ring-1 focus:ring-white"
+            placeholder="Search Google..."
+            className="flex-1 rounded-xl border border-neutral-700 bg-neutral-800 px-3 py-2.5 text-sm text-white placeholder-neutral-500 focus:border-white focus:outline-none focus:ring-1 focus:ring-white"
           />
           <button
             type="submit"
             disabled={searching || !searchQuery.trim()}
-            className="rounded-lg bg-white px-4 py-2 font-semibold text-neutral-900 transition hover:bg-neutral-200 disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-neutral-900 transition hover:bg-neutral-200 disabled:cursor-not-allowed disabled:opacity-50 active:scale-[0.98]"
           >
-            {searching ? "Searching..." : "Search"}
+            {searching ? "..." : "Search"}
           </button>
         </form>
 
         {searchResults.length > 0 && (
           <ul className="mt-4 space-y-3">
             {searchResults.map((result, i) => (
-              <li key={i} className="rounded-lg border border-neutral-800 bg-neutral-800/50 p-3">
+              <li key={i} className="rounded-xl border border-neutral-800 bg-neutral-800/50 p-3">
                 <a href={result.link} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-white hover:underline">
                   {result.title}
                 </a>
-                <p className="text-xs text-neutral-400 mt-1">{result.snippet}</p>
+                <p className="text-xs text-neutral-400 mt-1 line-clamp-2">{result.snippet}</p>
                 <p className="text-xs text-neutral-500 mt-1 truncate">{result.link}</p>
               </li>
             ))}
@@ -147,44 +147,42 @@ export default function AssistantPage() {
         )}
       </div>
 
-      <form onSubmit={handleAdd} className="mt-8 flex gap-3">
+      <form onSubmit={handleAdd} className="mt-6 flex gap-2 sm:gap-3">
         <input
           type="text"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           placeholder="What needs to be done?"
-          className="flex-1 rounded-lg border border-neutral-700 bg-neutral-800 px-4 py-2 text-white placeholder-neutral-500 focus:border-white focus:outline-none focus:ring-1 focus:ring-white"
+          className="flex-1 rounded-xl border border-neutral-700 bg-neutral-800 px-3 py-2.5 text-sm text-white placeholder-neutral-500 focus:border-white focus:outline-none focus:ring-1 focus:ring-white"
         />
         <select
           value={priority}
           onChange={(e) => setPriority(e.target.value as Task["priority"])}
-          className="rounded-lg border border-neutral-700 bg-neutral-800 px-3 py-2 text-sm text-white focus:border-white focus:outline-none"
+          className="rounded-xl border border-neutral-700 bg-neutral-800 px-2 py-2.5 text-xs text-white focus:border-white focus:outline-none sm:text-sm"
         >
           <option value="high">High</option>
-          <option value="medium">Medium</option>
+          <option value="medium">Med</option>
           <option value="low">Low</option>
         </select>
         <button
           type="submit"
           disabled={!title.trim()}
-          className="rounded-lg bg-white px-4 py-2 font-semibold text-neutral-900 transition hover:bg-neutral-200 disabled:cursor-not-allowed disabled:opacity-50"
+          className="rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-neutral-900 transition hover:bg-neutral-200 disabled:cursor-not-allowed disabled:opacity-50 active:scale-[0.98]"
         >
           Add
         </button>
       </form>
 
       {loading ? (
-        <p className="mt-8 text-center text-neutral-500">Loading tasks...</p>
+        <p className="mt-8 text-center text-sm text-neutral-500">Loading tasks...</p>
       ) : (
-        <ul className="mt-6 space-y-3">
+        <ul className="mt-4 space-y-3">
           {tasks.map((task) => (
             <li
               key={task.id}
-              className={`flex items-center justify-between gap-4 rounded-lg border border-neutral-800 bg-neutral-900 p-4 ${
-                task.completed ? "opacity-60" : ""
-              }`}
+              className={`flex items-center justify-between gap-3 rounded-xl border border-neutral-800 bg-neutral-900 p-3 sm:p-4 ${task.completed ? "opacity-60" : ""}`}
             >
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2.5 sm:gap-3">
                 <input
                   type="checkbox"
                   checked={task.completed}
@@ -195,7 +193,7 @@ export default function AssistantPage() {
                   {task.title}
                 </span>
                 <span
-                  className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                  className={`rounded-full px-2 py-0.5 text-[10px] font-medium sm:text-xs ${
                     task.priority === "high"
                       ? "bg-red-500/10 text-red-400"
                       : task.priority === "medium"
@@ -208,22 +206,22 @@ export default function AssistantPage() {
               </div>
               <button
                 onClick={() => handleDelete(task.id)}
-                className="text-sm text-neutral-500 transition hover:text-red-400"
+                className="text-xs text-neutral-500 transition hover:text-red-400 active:scale-[0.95]"
               >
                 Delete
               </button>
             </li>
           ))}
           {tasks.length === 0 && (
-            <li className="rounded-lg border border-dashed border-neutral-800 p-8 text-center text-neutral-500">
-              No tasks yet. Add one above to get started.
+            <li className="rounded-xl border border-dashed border-neutral-800 p-8 text-center text-sm text-neutral-500">
+              No tasks yet. Add one above.
             </li>
           )}
         </ul>
       )}
 
       {tasks.length > 0 && (
-        <div className="mt-6 text-sm text-neutral-500">
+        <div className="mt-4 text-xs text-neutral-500 sm:text-sm">
           {completedCount} of {tasks.length} completed
         </div>
       )}
